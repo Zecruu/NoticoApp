@@ -1,6 +1,6 @@
 "use client";
 
-import { type LocalItem } from "@/lib/db/indexed-db";
+import { type LocalItem, type LocalFolder } from "@/lib/db/indexed-db";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -26,6 +26,7 @@ import { cn } from "@/lib/utils";
 
 interface ItemCardProps {
   item: LocalItem;
+  folder?: LocalFolder;
   onEdit: (item: LocalItem) => void;
   onDelete: (clientId: string) => void;
   onTogglePin: (clientId: string, pinned: boolean) => void;
@@ -38,7 +39,7 @@ const typeConfig = {
   reminder: { icon: Bell, label: "Reminder", color: "bg-amber-500/10 text-amber-600 dark:text-amber-400" },
 };
 
-export function ItemCard({ item, onEdit, onDelete, onTogglePin, onToggleComplete }: ItemCardProps) {
+export function ItemCard({ item, folder, onEdit, onDelete, onTogglePin, onToggleComplete }: ItemCardProps) {
   const config = typeConfig[item.type];
   const TypeIcon = config.icon;
 
@@ -64,6 +65,15 @@ export function ItemCard({ item, onEdit, onDelete, onTogglePin, onToggleComplete
               <TypeIcon className="h-2.5 w-2.5" />
               {config.label}
             </Badge>
+            {folder && (
+              <Badge variant="outline" className="text-[10px] gap-1 px-1.5 py-0">
+                <div
+                  className="h-1.5 w-1.5 rounded-sm"
+                  style={{ backgroundColor: folder.color || "#6b7280" }}
+                />
+                {folder.name}
+              </Badge>
+            )}
             {item.pinned && (
               <Pin className="h-3 w-3 text-primary fill-primary" />
             )}

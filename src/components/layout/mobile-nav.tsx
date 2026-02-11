@@ -4,17 +4,18 @@ import { cn } from "@/lib/utils";
 import {
   FileText,
   Link2,
-  Bell,
-  LayoutDashboard,
   Plus,
+  LayoutDashboard,
+  Settings,
 } from "lucide-react";
+import Link from "next/link";
 
 const navItems = [
   { label: "All", value: "all", icon: LayoutDashboard },
   { label: "Notes", value: "note", icon: FileText },
   { label: "New", value: "new", icon: Plus },
   { label: "URLs", value: "url", icon: Link2 },
-  { label: "Reminders", value: "reminder", icon: Bell },
+  { label: "Settings", value: "settings", icon: Settings },
 ];
 
 interface MobileNavProps {
@@ -29,6 +30,22 @@ export function MobileNav({ activeFilter, onFilterChange, onCreateNew }: MobileN
       {navItems.map((item) => {
         const Icon = item.icon;
         const isNew = item.value === "new";
+        const isSettings = item.value === "settings";
+
+        if (isSettings) {
+          return (
+            <Link
+              key={item.value}
+              href="/settings"
+              className="flex flex-1 flex-col items-center gap-0.5 py-2 text-[10px] text-muted-foreground transition-colors"
+            >
+              <div className="flex h-8 w-8 items-center justify-center rounded-full">
+                <Icon className="h-4 w-4" />
+              </div>
+              <span>{item.label}</span>
+            </Link>
+          );
+        }
 
         return (
           <button

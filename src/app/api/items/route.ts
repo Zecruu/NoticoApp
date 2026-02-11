@@ -10,6 +10,7 @@ export async function GET(request: NextRequest) {
     const type = searchParams.get("type");
     const search = searchParams.get("search");
     const since = searchParams.get("since");
+    const folderId = searchParams.get("folderId");
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const query: any = { deleted: { $ne: true } };
@@ -20,6 +21,10 @@ export async function GET(request: NextRequest) {
 
     if (search) {
       query.$text = { $search: search };
+    }
+
+    if (folderId) {
+      query.folderId = folderId;
     }
 
     if (since) {

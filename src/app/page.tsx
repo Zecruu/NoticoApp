@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useCallback } from "react";
 import { useItems } from "@/hooks/use-items";
+import { useFolders } from "@/hooks/use-folders";
 import { type LocalItem } from "@/lib/db/indexed-db";
 import { Header } from "@/components/layout/header";
 import { Sidebar } from "@/components/layout/sidebar";
@@ -13,17 +14,31 @@ import { toast } from "sonner";
 
 export default function Dashboard() {
   const [activeFilter, setActiveFilter] = useState("all");
+  const [activeFolder, setActiveFolder] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<LocalItem | null>(null);
 
+  const { folders } = useFolders();
   const { items, loading, syncing, addItem, editItem, removeItem, togglePin, syncNow } =
-    useItems(activeFilter, searchQuery);
+    useItems(activeFilter, searchQuery, activeFolder);
 
+  // Counts for sidebar (type-based, ignoring folder filter)
   const itemCounts = useMemo(() => {
     const counts: Record<string, number> = { note: 0, url: 0, reminder: 0 };
     for (const item of items) {
       counts[item.type] = (counts[item.type] || 0) + 1;
+    }
+    return counts;
+  }, [items]);
+
+  // Counts per folder
+  const folderItemCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const item of items) {
+      if (item.folderId) {
+        counts[item.folderId] = (counts[item.folderId] || 0) + 1;
+      }
     }
     return counts;
   }, [items]);
@@ -95,20 +110,26 @@ export default function Dashboard() {
       <div className="flex flex-1 overflow-hidden">
         <Sidebar
           activeFilter={activeFilter}
+          activeFolder={activeFolder}
           onFilterChange={setActiveFilter}
+          onFolderChange={setActiveFolder}
           onCreateNew={handleCreateNew}
           itemCounts={itemCounts}
+          folders={folders}
+          folderItemCounts={folderItemCounts}
         />
 
         <main className="flex-1 overflow-auto pb-16 md:pb-0">
           <ItemList
             items={items}
+            folders={folders}
             loading={loading}
             onEdit={handleEdit}
             onDelete={handleDelete}
             onTogglePin={handleTogglePin}
             onToggleComplete={handleToggleComplete}
             activeFilter={activeFilter}
+            activeFolder={activeFolder}
           />
         </main>
       </div>
@@ -128,6 +149,8 @@ export default function Dashboard() {
         onSave={handleSave}
         onUpdate={handleUpdate}
         editingItem={editingItem}
+        folders={folders}
+        defaultFolderId={activeFolder}
       />
 
       <SearchCommand onSelect={handleSearchSelect} />

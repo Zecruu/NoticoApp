@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { type LocalItem, type ItemType } from "@/lib/db/indexed-db";
+import { type LocalItem, type ItemType, type LocalFolder } from "@/lib/db/indexed-db";
 import {
   Dialog,
   DialogContent,
@@ -13,6 +13,13 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { FileText, Link2, Bell, X } from "lucide-react";
 
@@ -22,9 +29,11 @@ interface ItemDialogProps {
   onSave: (item: Omit<LocalItem, "id" | "clientId" | "createdAt" | "updatedAt" | "deleted">) => void;
   onUpdate?: (clientId: string, updates: Partial<LocalItem>) => void;
   editingItem?: LocalItem | null;
+  folders: LocalFolder[];
+  defaultFolderId?: string | null;
 }
 
-export function ItemDialog({ open, onClose, onSave, onUpdate, editingItem }: ItemDialogProps) {
+export function ItemDialog({ open, onClose, onSave, onUpdate, editingItem, folders, defaultFolderId }: ItemDialogProps) {
   const [type, setType] = useState<ItemType>("note");
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
@@ -33,6 +42,7 @@ export function ItemDialog({ open, onClose, onSave, onUpdate, editingItem }: Ite
   const [tagInput, setTagInput] = useState("");
   const [tags, setTags] = useState<string[]>([]);
   const [pinned, setPinned] = useState(false);
+  const [folderId, setFolderId] = useState<string | undefined>(undefined);
 
   useEffect(() => {
     if (editingItem) {
@@ -47,6 +57,7 @@ export function ItemDialog({ open, onClose, onSave, onUpdate, editingItem }: Ite
       );
       setTags(editingItem.tags);
       setPinned(editingItem.pinned);
+      setFolderId(editingItem.folderId || undefined);
     } else {
       setType("note");
       setTitle("");
@@ -55,8 +66,9 @@ export function ItemDialog({ open, onClose, onSave, onUpdate, editingItem }: Ite
       setReminderDate("");
       setTags([]);
       setPinned(false);
+      setFolderId(defaultFolderId || undefined);
     }
-  }, [editingItem, open]);
+  }, [editingItem, open, defaultFolderId]);
 
   const handleAddTag = () => {
     const tag = tagInput.trim();
@@ -83,6 +95,7 @@ export function ItemDialog({ open, onClose, onSave, onUpdate, editingItem }: Ite
       tags,
       pinned,
       color: editingItem?.color,
+      folderId: folderId || undefined,
     };
 
     if (editingItem && onUpdate) {
@@ -121,11 +134,38 @@ export function ItemDialog({ open, onClose, onSave, onUpdate, editingItem }: Ite
                 </TabsTrigger>
               </TabsList>
 
-              {/* Hidden tab contents just to satisfy Tabs component */}
               <TabsContent value="note" className="hidden" />
               <TabsContent value="url" className="hidden" />
               <TabsContent value="reminder" className="hidden" />
             </Tabs>
+          )}
+
+          {folders.length > 0 && (
+            <div className="space-y-2">
+              <Label>Folder</Label>
+              <Select
+                value={folderId || "none"}
+                onValueChange={(v) => setFolderId(v === "none" ? undefined : v)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="No folder" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">No folder</SelectItem>
+                  {folders.map((folder) => (
+                    <SelectItem key={folder.clientId} value={folder.clientId}>
+                      <div className="flex items-center gap-2">
+                        <div
+                          className="h-2.5 w-2.5 rounded-sm shrink-0"
+                          style={{ backgroundColor: folder.color || "#6b7280" }}
+                        />
+                        {folder.name}
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           )}
 
           <div className="space-y-2">

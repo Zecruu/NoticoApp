@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import dbConnect from "@/lib/mongodb";
 import Item from "@/models/Item";
+import Folder from "@/models/Folder";
 
 interface SyncOperation {
   action: "create" | "update" | "delete";
@@ -12,14 +13,56 @@ export async function POST(request: NextRequest) {
   try {
     await dbConnect();
 
-    const { operations, lastSyncAt } = await request.json() as {
+    const { operations, folderOperations, lastSyncAt } = await request.json() as {
       operations: SyncOperation[];
+      folderOperations?: SyncOperation[];
       lastSyncAt?: string;
     };
 
     const results: Record<string, unknown>[] = [];
 
-    // Process each offline operation
+    // Process folder operations first
+    if (folderOperations) {
+      for (const op of folderOperations) {
+        try {
+          if (op.action === "create") {
+            const existing = await Folder.findOne({ clientId: op.clientId });
+            if (existing) {
+              results.push({ clientId: op.clientId, entity: "folder", status: "exists", item: existing });
+            } else {
+              const folder = await Folder.create({ ...op.data, clientId: op.clientId });
+              results.push({ clientId: op.clientId, entity: "folder", status: "created", item: folder });
+            }
+          } else if (op.action === "update") {
+            const folder = await Folder.findOneAndUpdate(
+              { clientId: op.clientId },
+              op.data,
+              { new: true, runValidators: true }
+            );
+            results.push({ clientId: op.clientId, entity: "folder", status: folder ? "updated" : "not_found", item: folder });
+          } else if (op.action === "delete") {
+            const folder = await Folder.findOneAndUpdate(
+              { clientId: op.clientId },
+              { deleted: true },
+              { new: true }
+            );
+            // Cascade delete items in this folder
+            if (folder) {
+              await Item.updateMany(
+                { folderId: folder.clientId, deleted: { $ne: true } },
+                { deleted: true }
+              );
+            }
+            results.push({ clientId: op.clientId, entity: "folder", status: folder ? "deleted" : "not_found" });
+          }
+        } catch (opError) {
+          console.error(`Folder sync operation failed for ${op.clientId}:`, opError);
+          results.push({ clientId: op.clientId, entity: "folder", status: "error", error: String(opError) });
+        }
+      }
+    }
+
+    // Process item operations
     for (const op of operations) {
       try {
         if (op.action === "create") {
@@ -51,16 +94,18 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Return all items updated since last sync for pull
+    // Return all items and folders updated since last sync
     const query: Record<string, unknown> = {};
     if (lastSyncAt) {
       query.updatedAt = { $gte: new Date(lastSyncAt) };
     }
     const serverItems = await Item.find(query).lean();
+    const serverFolders = await Folder.find(query).lean();
 
     return NextResponse.json({
       results,
       serverItems,
+      serverFolders,
       syncedAt: new Date().toISOString(),
     });
   } catch (error) {

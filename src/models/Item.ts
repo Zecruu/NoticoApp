@@ -13,6 +13,7 @@ export interface IItem {
   tags: string[];
   pinned: boolean;
   color?: string;
+  folderId?: string;
   deleted: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -62,6 +63,10 @@ const ItemSchema = new Schema<IItemDocument>(
     },
     color: {
       type: String,
+    },
+    folderId: {
+      type: String,
+      index: true,
     },
     deleted: {
       type: Boolean,

@@ -12,16 +12,16 @@ import {
   performSync,
 } from "@/lib/sync/sync-engine";
 
-export function useItems(typeFilter?: string, searchQuery?: string) {
+export function useItems(typeFilter?: string, searchQuery?: string, folderFilter?: string | null) {
   const [items, setItems] = useState<LocalItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
 
   const refresh = useCallback(async () => {
-    const result = await getItems(typeFilter, searchQuery);
+    const result = await getItems(typeFilter, searchQuery, folderFilter);
     setItems(result);
     setLoading(false);
-  }, [typeFilter, searchQuery]);
+  }, [typeFilter, searchQuery, folderFilter]);
 
   // Initial load + sync
   useEffect(() => {
