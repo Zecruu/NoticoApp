@@ -1,70 +1,67 @@
 "use client";
 
-import { useState } from "react";
-import { useFolders } from "@/hooks/use-folders";
-import { type LocalFolder } from "@/lib/db/indexed-db";
+import { useState, useRef, useEffect } from "react";
+import { signOut } from "next-auth/react";
+import { useSubscription } from "@/hooks/use-subscription";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-} from "@/components/ui/dialog";
-import { Separator } from "@/components/ui/separator";
-import { ArrowLeft, Plus, Pencil, Trash2, FolderOpen } from "lucide-react";
+import { ArrowLeft, Crown, LogIn, Download, Upload, Key, Copy, RefreshCw } from "lucide-react";
+import { exportData, importData } from "@/lib/import-export";
 import { toast } from "sonner";
 import Link from "next/link";
 
-const PRESET_COLORS = [
-  "#ef4444", "#f97316", "#eab308", "#22c55e",
-  "#06b6d4", "#3b82f6", "#8b5cf6", "#ec4899",
-  "#6b7280", "#78716c",
-];
-
 export default function SettingsPage() {
-  const { folders, addFolder, editFolder, removeFolder } = useFolders();
+  const { session, isAuthenticated, isProUser, tier } = useSubscription();
+  const [portalLoading, setPortalLoading] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [apiToken, setApiToken] = useState<string | null>(null);
+  const [tokenLoading, setTokenLoading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [showNewForm, setShowNewForm] = useState(false);
-  const [newName, setNewName] = useState("");
-  const [newColor, setNewColor] = useState(PRESET_COLORS[5]);
+  useEffect(() => {
+    if (isAuthenticated) {
+      fetch("/api/user/token")
+        .then((r) => r.json())
+        .then((d) => setApiToken(d.token))
+        .catch(() => {});
+    }
+  }, [isAuthenticated]);
 
-  const [editingFolder, setEditingFolder] = useState<LocalFolder | null>(null);
-  const [editName, setEditName] = useState("");
-  const [editColor, setEditColor] = useState("");
-
-  const [deleteConfirm, setDeleteConfirm] = useState<LocalFolder | null>(null);
-
-  const handleCreate = async () => {
-    if (!newName.trim()) return;
-    await addFolder({ name: newName.trim(), color: newColor });
-    setNewName("");
-    setNewColor(PRESET_COLORS[5]);
-    setShowNewForm(false);
-    toast.success("Folder created");
+  const handleManageSubscription = async () => {
+    setPortalLoading(true);
+    const res = await fetch("/api/stripe/portal", { method: "POST" });
+    const data = await res.json();
+    setPortalLoading(false);
+    if (data.url) {
+      window.location.href = data.url;
+    }
   };
 
-  const handleEdit = async () => {
-    if (!editingFolder || !editName.trim()) return;
-    await editFolder(editingFolder.clientId, { name: editName.trim(), color: editColor });
-    setEditingFolder(null);
-    toast.success("Folder updated");
+  const handleExport = async () => {
+    const blob = await exportData();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `notico-export-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success("Data exported");
   };
 
-  const handleDelete = async () => {
-    if (!deleteConfirm) return;
-    await removeFolder(deleteConfirm.clientId);
-    setDeleteConfirm(null);
-    toast.success("Folder and all its items deleted");
-  };
-
-  const startEdit = (folder: LocalFolder) => {
-    setEditingFolder(folder);
-    setEditName(folder.name);
-    setEditColor(folder.color || "#6b7280");
+  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImporting(true);
+    try {
+      const text = await file.text();
+      const result = await importData(text);
+      toast.success(`Imported ${result.items} items and ${result.folders} folders`);
+    } catch {
+      toast.error("Failed to import data. Check the file format.");
+    } finally {
+      setImporting(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
   };
 
   return (
@@ -81,175 +78,209 @@ export default function SettingsPage() {
       </header>
 
       <main className="mx-auto max-w-2xl p-4 md:p-6 space-y-6">
+        {/* Account */}
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0">
-            <CardTitle className="text-base">Folders</CardTitle>
-            <Button
-              size="sm"
-              onClick={() => setShowNewForm(true)}
-              className="gap-1.5"
-            >
-              <Plus className="h-3.5 w-3.5" />
-              New Folder
-            </Button>
+          <CardHeader>
+            <CardTitle className="text-base">Account</CardTitle>
           </CardHeader>
           <CardContent>
-            {showNewForm && (
-              <div className="mb-4 rounded-lg border p-4 space-y-3">
-                <div className="space-y-2">
-                  <Label>Folder Name</Label>
-                  <Input
-                    placeholder="e.g., Work Project"
-                    value={newName}
-                    onChange={(e) => setNewName(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") handleCreate();
-                    }}
-                    autoFocus
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Color</Label>
-                  <div className="flex gap-2 flex-wrap">
-                    {PRESET_COLORS.map((color) => (
-                      <button
-                        key={color}
-                        onClick={() => setNewColor(color)}
-                        className="h-7 w-7 rounded-md border-2 transition-transform hover:scale-110"
-                        style={{
-                          backgroundColor: color,
-                          borderColor: newColor === color ? "white" : "transparent",
-                          boxShadow: newColor === color ? `0 0 0 2px ${color}` : "none",
-                        }}
-                      />
-                    ))}
+            {isAuthenticated && session ? (
+              <div className="space-y-3">
+                <div className="flex items-center gap-3">
+                  {session.user.image ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={session.user.image}
+                      alt=""
+                      className="h-10 w-10 rounded-full"
+                    />
+                  ) : (
+                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary text-primary-foreground text-sm font-medium">
+                      {(session.user.name || "U")[0].toUpperCase()}
+                    </div>
+                  )}
+                  <div>
+                    <p className="text-sm font-medium">{session.user.name}</p>
+                    <p className="text-xs text-muted-foreground">{session.user.email}</p>
                   </div>
                 </div>
-                <div className="flex gap-2 justify-end">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      setShowNewForm(false);
-                      setNewName("");
-                    }}
-                  >
-                    Cancel
-                  </Button>
-                  <Button size="sm" onClick={handleCreate} disabled={!newName.trim()}>
-                    Create
-                  </Button>
-                </div>
-              </div>
-            )}
-
-            {folders.length === 0 && !showNewForm ? (
-              <div className="flex flex-col items-center py-8 text-muted-foreground">
-                <FolderOpen className="h-10 w-10 mb-3 opacity-40" />
-                <p className="text-sm">No folders yet. Create one to organize your items.</p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => signOut({ callbackUrl: "/" })}
+                >
+                  Sign out
+                </Button>
               </div>
             ) : (
-              <div className="space-y-1">
-                {folders.map((folder) => (
-                  <div
-                    key={folder.clientId}
-                    className="flex items-center gap-3 rounded-lg px-3 py-2.5 hover:bg-muted transition-colors"
-                  >
-                    <div
-                      className="h-4 w-4 rounded-sm shrink-0"
-                      style={{ backgroundColor: folder.color || "#6b7280" }}
-                    />
-                    <span className="flex-1 text-sm font-medium">{folder.name}</span>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7"
-                      onClick={() => startEdit(folder)}
-                    >
-                      <Pencil className="h-3.5 w-3.5" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7 text-destructive hover:text-destructive"
-                      onClick={() => setDeleteConfirm(folder)}
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
-                ))}
+              <div className="space-y-3">
+                <p className="text-sm text-muted-foreground">
+                  Sign in to sync your data across devices.
+                </p>
+                <Link href="/auth/sign-in">
+                  <Button size="sm" className="gap-1.5">
+                    <LogIn className="h-3.5 w-3.5" />
+                    Sign in
+                  </Button>
+                </Link>
               </div>
             )}
           </CardContent>
         </Card>
-      </main>
 
-      {/* Edit Dialog */}
-      <Dialog open={!!editingFolder} onOpenChange={(open) => !open && setEditingFolder(null)}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Edit Folder</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label>Name</Label>
-              <Input
-                value={editName}
-                onChange={(e) => setEditName(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") handleEdit();
-                }}
-                autoFocus
+        {/* Subscription */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Subscription</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {isProUser ? (
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <Crown className="h-4 w-4 text-primary" />
+                  <span className="text-sm font-medium">Pro Plan</span>
+                  <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
+                    Active
+                  </span>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Cloud sync is enabled. Your data syncs across all your devices.
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleManageSubscription}
+                  disabled={portalLoading}
+                >
+                  {portalLoading ? "Loading..." : "Manage Subscription"}
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium">Free Plan</span>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  {tier === "anonymous"
+                    ? "Sign in and upgrade to Pro to sync your data across devices."
+                    : "Your data is stored locally on this device. Upgrade to sync across devices."}
+                </p>
+                <Link href="/pricing">
+                  <Button size="sm" className="gap-1.5">
+                    <Crown className="h-3.5 w-3.5" />
+                    Upgrade to Pro
+                  </Button>
+                </Link>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Data */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Data & Storage</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              {isProUser
+                ? "Your data is stored locally and synced to the cloud."
+                : "Your data is stored locally on this device."}
+            </p>
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" className="gap-1.5" onClick={handleExport}>
+                <Download className="h-3.5 w-3.5" />
+                Export
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1.5"
+                disabled={importing}
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <Upload className="h-3.5 w-3.5" />
+                {importing ? "Importing..." : "Import"}
+              </Button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".json"
+                className="hidden"
+                onChange={handleImport}
               />
             </div>
-            <div className="space-y-2">
-              <Label>Color</Label>
-              <div className="flex gap-2 flex-wrap">
-                {PRESET_COLORS.map((color) => (
-                  <button
-                    key={color}
-                    onClick={() => setEditColor(color)}
-                    className="h-7 w-7 rounded-md border-2 transition-transform hover:scale-110"
-                    style={{
-                      backgroundColor: color,
-                      borderColor: editColor === color ? "white" : "transparent",
-                      boxShadow: editColor === color ? `0 0 0 2px ${color}` : "none",
+          </CardContent>
+        </Card>
+        {/* API Token for Web Clipper */}
+        {isAuthenticated && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Web Clipper</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <p className="text-sm text-muted-foreground">
+                Use this API token with the Notico browser extension to save clips from any webpage.
+              </p>
+              {apiToken ? (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <code className="flex-1 rounded bg-muted px-3 py-2 text-xs font-mono truncate">
+                      {apiToken}
+                    </code>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 shrink-0"
+                      onClick={() => {
+                        navigator.clipboard.writeText(apiToken);
+                        toast.success("Token copied");
+                      }}
+                    >
+                      <Copy className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-1.5"
+                    disabled={tokenLoading}
+                    onClick={async () => {
+                      setTokenLoading(true);
+                      const res = await fetch("/api/user/token", { method: "POST" });
+                      const data = await res.json();
+                      setApiToken(data.token);
+                      setTokenLoading(false);
+                      toast.success("Token regenerated");
                     }}
-                  />
-                ))}
-              </div>
-            </div>
-            <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setEditingFolder(null)}>
-                Cancel
-              </Button>
-              <Button onClick={handleEdit} disabled={!editName.trim()}>
-                Save
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Delete Confirmation Dialog */}
-      <Dialog open={!!deleteConfirm} onOpenChange={(open) => !open && setDeleteConfirm(null)}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Delete Folder</DialogTitle>
-            <DialogDescription>
-              Are you sure you want to delete &quot;{deleteConfirm?.name}&quot;? This will also permanently delete <strong>all notes, URLs, and reminders</strong> inside this folder. This action cannot be undone.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setDeleteConfirm(null)}>
-              Cancel
-            </Button>
-            <Button variant="destructive" onClick={handleDelete}>
-              Delete Folder & Contents
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+                  >
+                    <RefreshCw className="h-3.5 w-3.5" />
+                    Regenerate
+                  </Button>
+                </div>
+              ) : (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5"
+                  disabled={tokenLoading}
+                  onClick={async () => {
+                    setTokenLoading(true);
+                    const res = await fetch("/api/user/token", { method: "POST" });
+                    const data = await res.json();
+                    setApiToken(data.token);
+                    setTokenLoading(false);
+                    toast.success("Token generated");
+                  }}
+                >
+                  <Key className="h-3.5 w-3.5" />
+                  Generate API Token
+                </Button>
+              )}
+            </CardContent>
+          </Card>
+        )}
+      </main>
     </div>
   );
 }

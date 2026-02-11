@@ -2,6 +2,7 @@ import mongoose, { Schema, Document, Model } from "mongoose";
 
 export interface IFolder {
   clientId: string;
+  userId: string;
   name: string;
   color?: string;
   deleted: boolean;
@@ -17,6 +18,11 @@ const FolderSchema = new Schema<IFolderDocument>(
       type: String,
       required: true,
       unique: true,
+      index: true,
+    },
+    userId: {
+      type: String,
+      required: true,
       index: true,
     },
     name: {

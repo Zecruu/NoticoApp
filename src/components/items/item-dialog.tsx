@@ -21,7 +21,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { FileText, Link2, Bell, X } from "lucide-react";
+import { FileText, Link2, Bell, X, Eye, Pencil } from "lucide-react";
+import { MarkdownRenderer } from "@/components/markdown-renderer";
 
 interface ItemDialogProps {
   open: boolean;
@@ -43,6 +44,7 @@ export function ItemDialog({ open, onClose, onSave, onUpdate, editingItem, folde
   const [tags, setTags] = useState<string[]>([]);
   const [pinned, setPinned] = useState(false);
   const [folderId, setFolderId] = useState<string | undefined>(undefined);
+  const [previewing, setPreviewing] = useState(false);
 
   useEffect(() => {
     if (editingItem) {
@@ -68,6 +70,7 @@ export function ItemDialog({ open, onClose, onSave, onUpdate, editingItem, folde
       setPinned(false);
       setFolderId(defaultFolderId || undefined);
     }
+    setPreviewing(false);
   }, [editingItem, open, defaultFolderId]);
 
   const handleAddTag = () => {
@@ -211,20 +214,52 @@ export function ItemDialog({ open, onClose, onSave, onUpdate, editingItem, folde
           )}
 
           <div className="space-y-2">
-            <Label htmlFor="content">
-              {type === "note" ? "Content" : "Description (optional)"}
-            </Label>
-            <Textarea
-              id="content"
-              placeholder={
-                type === "note"
-                  ? "Write your note..."
-                  : "Add a description..."
-              }
-              value={content}
-              onChange={(e) => setContent(e.target.value)}
-              rows={type === "note" ? 6 : 3}
-            />
+            <div className="flex items-center justify-between">
+              <Label htmlFor="content">
+                {type === "note" ? "Content" : "Description (optional)"}
+              </Label>
+              {type === "note" && content && (
+                <div className="flex items-center gap-1 rounded-md border p-0.5">
+                  <button
+                    type="button"
+                    onClick={() => setPreviewing(false)}
+                    className={`flex items-center gap-1 rounded-sm px-2 py-0.5 text-xs transition-colors ${
+                      !previewing ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    <Pencil className="h-3 w-3" />
+                    Edit
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPreviewing(true)}
+                    className={`flex items-center gap-1 rounded-sm px-2 py-0.5 text-xs transition-colors ${
+                      previewing ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    <Eye className="h-3 w-3" />
+                    Preview
+                  </button>
+                </div>
+              )}
+            </div>
+            {previewing && type === "note" ? (
+              <div className="min-h-[150px] max-h-[300px] overflow-auto rounded-md border bg-background p-3">
+                <MarkdownRenderer content={content} />
+              </div>
+            ) : (
+              <Textarea
+                id="content"
+                placeholder={
+                  type === "note"
+                    ? "Write your note... (supports markdown)"
+                    : "Add a description..."
+                }
+                value={content}
+                onChange={(e) => setContent(e.target.value)}
+                rows={type === "note" ? 6 : 3}
+              />
+            )}
           </div>
 
           <div className="space-y-2">

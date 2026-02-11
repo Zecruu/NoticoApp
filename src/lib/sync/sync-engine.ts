@@ -3,6 +3,15 @@ import { v4 as uuidv4 } from "uuid";
 
 const SYNC_KEY = "notico_last_sync";
 
+// ─── TIER GATING ───
+
+export type SyncTier = "free" | "pro" | "anonymous";
+let currentTier: SyncTier = "anonymous";
+
+export function setSyncTier(tier: SyncTier) {
+  currentTier = tier;
+}
+
 function getLastSync(): string | null {
   if (typeof window === "undefined") return null;
   return localStorage.getItem(SYNC_KEY);
@@ -74,6 +83,7 @@ export async function deleteItem(clientId: string): Promise<void> {
 
   await db.items.where("clientId").equals(clientId).modify((i) => {
     i.deleted = true;
+    i.deletedAt = now;
     i.updatedAt = now;
   });
 
@@ -124,6 +134,60 @@ export async function getItems(
   });
 
   return items;
+}
+
+// ─── TRASH OPERATIONS ───
+
+export async function getDeletedItems(): Promise<LocalItem[]> {
+  const items = await db.items.toArray();
+  return items
+    .filter((item) => item.deleted)
+    .sort((a, b) => {
+      const aTime = a.deletedAt ? new Date(a.deletedAt).getTime() : 0;
+      const bTime = b.deletedAt ? new Date(b.deletedAt).getTime() : 0;
+      return bTime - aTime;
+    });
+}
+
+export async function restoreItem(clientId: string): Promise<void> {
+  const now = new Date().toISOString();
+
+  await db.items.where("clientId").equals(clientId).modify((i) => {
+    i.deleted = false;
+    i.deletedAt = undefined;
+    i.updatedAt = now;
+  });
+
+  await db.syncQueue.add({
+    action: "update",
+    entityType: "item",
+    clientId,
+    data: { deleted: false, deletedAt: null, updatedAt: now },
+    timestamp: now,
+  });
+
+  triggerSync();
+}
+
+export async function permanentlyDeleteItem(clientId: string): Promise<void> {
+  await db.items.where("clientId").equals(clientId).delete();
+}
+
+export async function purgeOldTrash(): Promise<void> {
+  const thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+  const items = await db.items.toArray();
+  const toPurge = items.filter(
+    (item) =>
+      item.deleted &&
+      item.deletedAt &&
+      new Date(item.deletedAt) < thirtyDaysAgo
+  );
+
+  for (const item of toPurge) {
+    await db.items.where("clientId").equals(item.clientId).delete();
+  }
 }
 
 // ─── FOLDER OPERATIONS ───
@@ -230,6 +294,7 @@ export async function getFolders(): Promise<LocalFolder[]> {
 let syncInProgress = false;
 
 export async function performSync(): Promise<boolean> {
+  if (currentTier !== "pro") return false;
   if (syncInProgress || !navigator.onLine) return false;
 
   syncInProgress = true;
@@ -342,6 +407,7 @@ export async function performSync(): Promise<boolean> {
 let syncTimeout: ReturnType<typeof setTimeout> | null = null;
 
 export function triggerSync() {
+  if (currentTier !== "pro") return;
   if (syncTimeout) clearTimeout(syncTimeout);
   syncTimeout = setTimeout(() => {
     performSync();
@@ -349,6 +415,7 @@ export function triggerSync() {
 }
 
 export async function initialSync(): Promise<void> {
+  if (currentTier !== "pro") return;
   if (!navigator.onLine) return;
 
   try {

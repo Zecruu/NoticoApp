@@ -10,18 +10,38 @@ import { MobileNav } from "@/components/layout/mobile-nav";
 import { ItemList } from "@/components/items/item-list";
 import { ItemDialog } from "@/components/items/item-dialog";
 import { SearchCommand } from "@/components/items/search-bar";
+import { TrashView } from "@/components/items/trash-view";
+import { CalendarView } from "@/components/calendar/calendar-view";
+import { useSubscription } from "@/hooks/use-subscription";
+import { AuthGate } from "@/components/auth-gate";
+import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 export default function Dashboard() {
   const [activeFilter, setActiveFilter] = useState("all");
   const [activeFolder, setActiveFolder] = useState<string | null>(null);
+  const [activeView, setActiveView] = useState("list");
+  const [activeTag, setActiveTag] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<LocalItem | null>(null);
 
-  const { folders } = useFolders();
-  const { items, loading, syncing, addItem, editItem, removeItem, togglePin, syncNow } =
-    useItems(activeFilter, searchQuery, activeFolder);
+  const { tier, session, isAuthenticated, isLoading } = useSubscription();
+
+  const { folders, addFolder, editFolder, removeFolder } = useFolders(tier);
+  const {
+    items,
+    trashedItems,
+    loading,
+    syncing,
+    addItem,
+    editItem,
+    removeItem,
+    togglePin,
+    restoreItem,
+    permanentlyDeleteItem,
+    syncNow,
+  } = useItems(activeFilter, searchQuery, activeFolder, tier);
 
   // Counts for sidebar (type-based, ignoring folder filter)
   const itemCounts = useMemo(() => {
@@ -30,6 +50,28 @@ export default function Dashboard() {
       counts[item.type] = (counts[item.type] || 0) + 1;
     }
     return counts;
+  }, [items]);
+
+  // Collect all unique tags from items
+  const allTags = useMemo(() => {
+    const tagSet = new Set<string>();
+    for (const item of items) {
+      for (const tag of item.tags) {
+        tagSet.add(tag);
+      }
+    }
+    return Array.from(tagSet).sort();
+  }, [items]);
+
+  // Filter items by active tag
+  const displayedItems = useMemo(() => {
+    if (!activeTag) return items;
+    return items.filter((item) => item.tags.includes(activeTag));
+  }, [items, activeTag]);
+
+  // Get reminder items for calendar
+  const reminderItems = useMemo(() => {
+    return items.filter((item) => item.type === "reminder" && item.reminderDate);
   }, [items]);
 
   // Counts per folder
@@ -98,6 +140,22 @@ export default function Dashboard() {
     setDialogOpen(true);
   }, []);
 
+  if (isLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <div className="text-center space-y-3">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo.png" alt="Notico" className="h-12 w-12 mx-auto" />
+          <Loader2 className="h-5 w-5 animate-spin mx-auto text-muted-foreground" />
+        </div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return <AuthGate />;
+  }
+
   return (
     <div className="flex h-screen flex-col">
       <Header
@@ -105,6 +163,8 @@ export default function Dashboard() {
         onSearchChange={setSearchQuery}
         syncing={syncing}
         onSync={syncNow}
+        tier={tier}
+        session={session}
       />
 
       <div className="flex flex-1 overflow-hidden">
@@ -117,27 +177,59 @@ export default function Dashboard() {
           itemCounts={itemCounts}
           folders={folders}
           folderItemCounts={folderItemCounts}
+          onAddFolder={addFolder}
+          onEditFolder={editFolder}
+          onRemoveFolder={removeFolder}
+          tier={tier}
+          session={session}
+          activeView={activeView}
+          onViewChange={setActiveView}
+          trashCount={trashedItems.length}
+          allTags={allTags}
+          activeTag={activeTag}
+          onTagChange={setActiveTag}
         />
 
         <main className="flex-1 overflow-auto pb-16 md:pb-0">
-          <ItemList
-            items={items}
-            folders={folders}
-            loading={loading}
-            onEdit={handleEdit}
-            onDelete={handleDelete}
-            onTogglePin={handleTogglePin}
-            onToggleComplete={handleToggleComplete}
-            activeFilter={activeFilter}
-            activeFolder={activeFolder}
-          />
+          {activeView === "trash" ? (
+            <TrashView
+              items={trashedItems}
+              onRestore={restoreItem}
+              onPermanentDelete={permanentlyDeleteItem}
+            />
+          ) : activeView === "calendar" ? (
+            <CalendarView
+              items={reminderItems}
+              onEdit={handleEdit}
+              onToggleComplete={handleToggleComplete}
+            />
+          ) : (
+            <ItemList
+              items={displayedItems}
+              folders={folders}
+              loading={loading}
+              onEdit={handleEdit}
+              onDelete={handleDelete}
+              onTogglePin={handleTogglePin}
+              onToggleComplete={handleToggleComplete}
+              activeFilter={activeFilter}
+              activeFolder={activeFolder}
+            />
+          )}
         </main>
       </div>
 
       <MobileNav
         activeFilter={activeFilter}
+        activeFolder={activeFolder}
         onFilterChange={setActiveFilter}
+        onFolderChange={setActiveFolder}
         onCreateNew={handleCreateNew}
+        folders={folders}
+        folderItemCounts={folderItemCounts}
+        onAddFolder={addFolder}
+        onEditFolder={editFolder}
+        onRemoveFolder={removeFolder}
       />
 
       <ItemDialog

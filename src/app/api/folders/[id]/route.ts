@@ -2,20 +2,25 @@ import { NextRequest, NextResponse } from "next/server";
 import dbConnect from "@/lib/mongodb";
 import Folder from "@/models/Folder";
 import Item from "@/models/Item";
+import { requirePro } from "@/lib/auth-utils";
 
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const { error, user } = await requirePro();
+  if (error) return error;
+
   try {
     await dbConnect();
     const { id } = await params;
     const body = await request.json();
 
-    const folder = await Folder.findByIdAndUpdate(id, body, {
-      new: true,
-      runValidators: true,
-    }).lean();
+    const folder = await Folder.findOneAndUpdate(
+      { _id: id, userId: user!.id },
+      body,
+      { new: true, runValidators: true }
+    ).lean();
 
     if (!folder) {
       return NextResponse.json({ error: "Folder not found" }, { status: 404 });
@@ -32,22 +37,25 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const { error, user } = await requirePro();
+  if (error) return error;
+  const userId = user!.id;
+
   try {
     await dbConnect();
     const { id } = await params;
 
-    const folder = await Folder.findById(id);
+    const folder = await Folder.findOne({ _id: id, userId });
     if (!folder) {
       return NextResponse.json({ error: "Folder not found" }, { status: 404 });
     }
 
     // Cascade: soft-delete all items in this folder
     await Item.updateMany(
-      { folderId: folder.clientId, deleted: { $ne: true } },
+      { folderId: folder.clientId, userId, deleted: { $ne: true } },
       { deleted: true }
     );
 
-    // Soft-delete the folder
     folder.deleted = true;
     await folder.save();
 

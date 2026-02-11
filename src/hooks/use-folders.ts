@@ -9,9 +9,10 @@ import {
   getFolders,
   initialSync,
   setupSyncListeners,
+  type SyncTier,
 } from "@/lib/sync/sync-engine";
 
-export function useFolders() {
+export function useFolders(tier: SyncTier = "anonymous") {
   const [folders, setFolders] = useState<LocalFolder[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -26,7 +27,7 @@ export function useFolders() {
 
     async function init() {
       await refresh();
-      if (mounted) {
+      if (mounted && tier === "pro") {
         await initialSync();
         await refresh();
       }
@@ -38,7 +39,7 @@ export function useFolders() {
     return () => {
       mounted = false;
     };
-  }, [refresh]);
+  }, [refresh, tier]);
 
   const addFolder = useCallback(
     async (folder: Omit<LocalFolder, "id" | "clientId" | "createdAt" | "updatedAt" | "deleted">) => {

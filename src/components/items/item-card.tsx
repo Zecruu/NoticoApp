@@ -21,8 +21,12 @@ import {
   Link2,
   Bell,
   Check,
+  Copy,
+  Share2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
+import { MarkdownRenderer } from "@/components/markdown-renderer";
 
 interface ItemCardProps {
   item: LocalItem;
@@ -133,6 +137,28 @@ export function ItemCard({ item, folder, onEdit, onDelete, onTogglePin, onToggle
               </DropdownMenuItem>
             )}
             <DropdownMenuItem
+              onClick={async (e) => {
+                e.stopPropagation();
+                try {
+                  const res = await fetch("/api/share", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ clientId: item.clientId }),
+                  });
+                  if (!res.ok) throw new Error();
+                  const { shareId } = await res.json();
+                  const url = `${window.location.origin}/shared/${shareId}`;
+                  await navigator.clipboard.writeText(url);
+                  toast.success("Share link copied to clipboard");
+                } catch {
+                  toast.error("Failed to create share link");
+                }
+              }}
+            >
+              <Share2 className="h-3.5 w-3.5 mr-2" />
+              Share
+            </DropdownMenuItem>
+            <DropdownMenuItem
               className="text-destructive"
               onClick={(e) => {
                 e.stopPropagation();
@@ -161,9 +187,9 @@ export function ItemCard({ item, folder, onEdit, onDelete, onTogglePin, onToggle
         )}
 
         {item.content && (
-          <p className="text-xs text-muted-foreground line-clamp-3">
-            {item.content}
-          </p>
+          <div className="text-xs text-muted-foreground line-clamp-3 overflow-hidden">
+            <MarkdownRenderer content={item.content} compact />
+          </div>
         )}
 
         {item.type === "reminder" && item.reminderDate && (
@@ -196,6 +222,19 @@ export function ItemCard({ item, folder, onEdit, onDelete, onTogglePin, onToggle
               </Badge>
             ))}
           </div>
+        )}
+
+        {item.content && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              navigator.clipboard.writeText(item.content);
+              toast.success("Copied to clipboard");
+            }}
+            className="absolute bottom-2 right-2 flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground/50 opacity-0 transition-opacity hover:bg-muted hover:text-foreground group-hover:opacity-100"
+          >
+            <Copy className="h-3.5 w-3.5" />
+          </button>
         )}
       </CardContent>
     </Card>

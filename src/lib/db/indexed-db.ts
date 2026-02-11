@@ -17,6 +17,7 @@ export interface LocalItem {
   color?: string;
   folderId?: string;
   deleted: boolean;
+  deletedAt?: string;
   createdAt: string;
   updatedAt: string;
 }

@@ -7,19 +7,38 @@ import {
   updateItem,
   deleteItem,
   getItems,
+  getDeletedItems,
+  restoreItem as restoreItemEngine,
+  permanentlyDeleteItem as permDeleteEngine,
+  purgeOldTrash,
   initialSync,
   setupSyncListeners,
   performSync,
+  setSyncTier,
+  type SyncTier,
 } from "@/lib/sync/sync-engine";
 
-export function useItems(typeFilter?: string, searchQuery?: string, folderFilter?: string | null) {
+export function useItems(
+  typeFilter?: string,
+  searchQuery?: string,
+  folderFilter?: string | null,
+  tier: SyncTier = "anonymous"
+) {
   const [items, setItems] = useState<LocalItem[]>([]);
+  const [trashedItems, setTrashedItems] = useState<LocalItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
+
+  // Keep sync engine tier in sync
+  useEffect(() => {
+    setSyncTier(tier);
+  }, [tier]);
 
   const refresh = useCallback(async () => {
     const result = await getItems(typeFilter, searchQuery, folderFilter);
     setItems(result);
+    const deleted = await getDeletedItems();
+    setTrashedItems(deleted);
     setLoading(false);
   }, [typeFilter, searchQuery, folderFilter]);
 
@@ -28,11 +47,14 @@ export function useItems(typeFilter?: string, searchQuery?: string, folderFilter
     let mounted = true;
 
     async function init() {
+      // Purge items trashed more than 30 days ago
+      await purgeOldTrash();
+
       // Load from IndexedDB first (instant)
       await refresh();
 
-      // Then sync with server
-      if (mounted) {
+      // Then sync with server (only for pro users)
+      if (mounted && tier === "pro") {
         setSyncing(true);
         await initialSync();
         await refresh();
@@ -46,7 +68,7 @@ export function useItems(typeFilter?: string, searchQuery?: string, folderFilter
     return () => {
       mounted = false;
     };
-  }, [refresh]);
+  }, [refresh, tier]);
 
   const addItem = useCallback(
     async (item: Omit<LocalItem, "id" | "clientId" | "createdAt" | "updatedAt" | "deleted">) => {
@@ -80,21 +102,41 @@ export function useItems(typeFilter?: string, searchQuery?: string, folderFilter
     [refresh]
   );
 
+  const restoreItem = useCallback(
+    async (clientId: string) => {
+      await restoreItemEngine(clientId);
+      await refresh();
+    },
+    [refresh]
+  );
+
+  const permanentlyDeleteItem = useCallback(
+    async (clientId: string) => {
+      await permDeleteEngine(clientId);
+      await refresh();
+    },
+    [refresh]
+  );
+
   const syncNow = useCallback(async () => {
+    if (tier !== "pro") return;
     setSyncing(true);
     await performSync();
     await refresh();
     setSyncing(false);
-  }, [refresh]);
+  }, [refresh, tier]);
 
   return {
     items,
+    trashedItems,
     loading,
     syncing,
     addItem,
     editItem,
     removeItem,
     togglePin,
+    restoreItem,
+    permanentlyDeleteItem,
     syncNow,
     refresh,
   };

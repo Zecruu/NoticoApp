@@ -1,8 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import dbConnect from "@/lib/mongodb";
 import Item from "@/models/Item";
+import { requirePro } from "@/lib/auth-utils";
 
 export async function GET(request: NextRequest) {
+  const { error, user } = await requirePro();
+  if (error) return error;
+  const userId = user!.id;
+
   try {
     await dbConnect();
 
@@ -13,7 +18,7 @@ export async function GET(request: NextRequest) {
     const folderId = searchParams.get("folderId");
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const query: any = { deleted: { $ne: true } };
+    const query: any = { userId, deleted: { $ne: true } };
 
     if (type && type !== "all") {
       query.type = type;
@@ -41,18 +46,21 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const { error, user } = await requirePro();
+  if (error) return error;
+  const userId = user!.id;
+
   try {
     await dbConnect();
 
     const body = await request.json();
 
-    // Idempotent create via clientId
-    const existing = await Item.findOne({ clientId: body.clientId });
+    const existing = await Item.findOne({ clientId: body.clientId, userId });
     if (existing) {
       return NextResponse.json(existing, { status: 200 });
     }
 
-    const item = await Item.create(body);
+    const item = await Item.create({ ...body, userId });
     return NextResponse.json(item, { status: 201 });
   } catch (error) {
     console.error("POST /api/items error:", error);

@@ -4,6 +4,7 @@ export type ItemType = "note" | "url" | "reminder";
 
 export interface IItem {
   clientId: string;
+  userId: string;
   type: ItemType;
   title: string;
   content: string;
@@ -15,6 +16,7 @@ export interface IItem {
   color?: string;
   folderId?: string;
   deleted: boolean;
+  deletedAt?: Date;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -27,6 +29,11 @@ const ItemSchema = new Schema<IItemDocument>(
       type: String,
       required: true,
       unique: true,
+      index: true,
+    },
+    userId: {
+      type: String,
+      required: true,
       index: true,
     },
     type: {
@@ -72,6 +79,9 @@ const ItemSchema = new Schema<IItemDocument>(
       type: Boolean,
       default: false,
       index: true,
+    },
+    deletedAt: {
+      type: Date,
     },
   },
   {
